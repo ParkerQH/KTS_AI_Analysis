@@ -6,7 +6,9 @@ import tempfile
 from ultralytics import YOLO
 from firebase_admin import storage, firestore
 
-import YOLOv11.YOLO as YOLO, YOLOv11.geocoding as geocoding
+import YOLOv11.YOLO as YOLO, YOLOv11.geocoding as geocoding, MediaPipe.lstm_Analysis as lstm_p1
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0 = 모든 로그, 1 = info 제거, 2 = warning 제거, 3 = error만
 
 def download_image(url):
     """이미지 URL에서 이미지를 다운로드해 numpy array로 반환"""
@@ -29,17 +31,34 @@ def process_image(image_url, date, user_id, violation, doc_id):
 
     traffic_violation_detection = []
 
-    # 1-1. 킥보드 감지
-    if not YOLO.kickboard_analysis(image):
+    # 1. 킥보드, 사람 감지
+    kickboard = YOLO.kickboard_analysis(image)
+    person = YOLO.person_analysis(image)
+
+    # 1-2. 킥보드 감지 피드백
+    if kickboard:
+        print("🚫 킥보드 감지 안됨")
+    else:
         traffic_violation_detection.append("킥보드 감지 실패")
+        print("🚫 킥보드 감지 안됨")
 
-    # 1-2. 사람 감지
-    if not YOLO.person_analysis(image):
+    # 1-3. 사람 감지 피드백
+    if person:
+        print("✅ 사람 감지")
+    else:
         traffic_violation_detection.append("사람 감지 실패")
+        print("🚫 사람 감지 안됨")
 
-    if YOLO.kickboard_analysis(image) and YOLO.person_analysis(image):
-        # 2. 자세 사람의 자세 분석(LSTM)
+    # 1-4. 탑승자와 보행자 구분
+    if kickboard and person:
+        lstm_pose = lstm_p1.lstm_Analysis_per1(image)
+        if lstm_pose:
+            print("✅ 탑승자 감지")
+        else:
+            traffic_violation_detection.append("보행자로 판단됨")
+            print("🚫 보행자로 판단")
 
+    if kickboard and person and lstm_pose:
         # 3-1. 전동킥보드 브랜드 분석
         top_brand_class = YOLO.brand_analysis(image)
 
@@ -87,15 +106,8 @@ def process_image(image_url, date, user_id, violation, doc_id):
             "region": parcel_addr,
             "gpsInfo": f"{lat} {lon}",
             "reportImgUrl": image_url,
+            "result" : "미확인"
         }
-
-        if ("사람 감지 실패" in traffic_violation_detection) or ("킥보드 감지 실패" in traffic_violation_detection):
-            conclusion_data.update(
-                {"result": "반려", "reason": traffic_violation_detection}
-            )
-        else:
-            conclusion_data.update({"result": "미확인"})
-
 
         # Firestore에 결과 저장
         db_fs.collection("Conclusion").document(doc_id).set(conclusion_data)
@@ -105,13 +117,30 @@ def process_image(image_url, date, user_id, violation, doc_id):
     else:
         print("🛑 킥보드 혹은 사람을 감지하지 못했습니다. 자동 반려처리 진행됩니다.\n")
 
+        # Firestore에 저장될 내용
+        db_fs = firestore.client()
+        doc_id = f"conclusion_{doc_id}"  # 문서 ID 생성
+        conclusion_data = {
+            "date": date,
+            "userId": user_id,
+            "aiConclusion": traffic_violation_detection,
+            "violation": violation,
+            "imageUrl": image_url,
+            "reportImgUrl": image_url,
+            "result" : "반려"
+        }
+
+    # Firestore에 결과 저장
+        db_fs.collection("Conclusion").document(doc_id).set(conclusion_data)
+
+        print(f"❌ 반려된 사진 url : {image_url}\n")
 
 # Firestore 실시간 리스너 설정
 def on_snapshot(col_snapshot, changes, read_time):
     # 초기 스냅샷은 무시 (최초 1회 실행 시 건너뜀)
-    if not hasattr(on_snapshot, "initialized"):
-        on_snapshot.initialized = True
-        return
+    # if not hasattr(on_snapshot, "initialized"):
+    #     on_snapshot.initialized = True
+    #     return
 
     for change in changes:
         if change.type.name == "ADDED":
@@ -134,7 +163,7 @@ def on_snapshot(col_snapshot, changes, read_time):
 
 if __name__ == "__main__":
     import time
-    import firebase_config
+    import YOLOv11.firebase_config
     from firebase_admin import firestore
 
     db_fs = firestore.client()
