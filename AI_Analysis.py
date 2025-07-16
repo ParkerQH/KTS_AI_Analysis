@@ -8,8 +8,6 @@ from firebase_admin import storage, firestore
 
 import YOLOv11.YOLO as YOLO, YOLOv11.geocoding as geocoding, MediaPipe.lstm_Analysis as lstm_p1
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0 = 모든 로그, 1 = info 제거, 2 = warning 제거, 3 = error만
-
 def download_image(url):
     """이미지 URL에서 이미지를 다운로드해 numpy array로 반환"""
     resp = requests.get(url, stream=True)
