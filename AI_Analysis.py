@@ -68,7 +68,7 @@ def process_image(image_url, date, user_id, violation, doc_id):
 
     # 1-2. 킥보드 감지 피드백
     if kickboard:
-        print("🚫 킥보드 감지 안됨")
+        print("✅ 킥보드 감지")
     else:
         traffic_violation_detection.append("킥보드 감지 실패")
         print("🚫 킥보드 감지 안됨")
