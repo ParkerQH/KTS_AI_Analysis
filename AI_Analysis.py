@@ -41,8 +41,18 @@ def find_adress(doc_id):
 
 # firebase 데이터 저장 메소드
 def save_conclusion(
-    doc_id, date, user_id, violation, result, region, gpsInfo, imageUrl, reportImgUrl, 
-    aiConclusion=None, detectedBrand=None, confidence=None
+    doc_id,
+    date,
+    user_id,
+    violation,
+    result,
+    region,
+    gpsInfo,
+    imageUrl,
+    reportImgUrl,
+    aiConclusion=None,
+    detectedBrand=None,
+    confidence=None,
 ):
 
     db_fs = firestore.client()
