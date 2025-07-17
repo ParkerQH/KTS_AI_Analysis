@@ -1,0 +1,8 @@
+opencv-python
+numpy
+requests
+firebase-admin
+ultralytics
+python-dotenv
+mediapipe
+tensorflow
