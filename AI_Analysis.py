@@ -211,9 +211,9 @@ def process_image(image_url, date, user_id, violation, doc_id):
 # Firestore 실시간 리스너 설정
 def on_snapshot(col_snapshot, changes, read_time):
     # 초기 스냅샷은 무시 (최초 1회 실행 시 건너뜀)
-    if not hasattr(on_snapshot, "initialized"):
-        on_snapshot.initialized = True
-        return
+    # if not hasattr(on_snapshot, "initialized"):
+    #     on_snapshot.initialized = True
+    #     return
 
     for change in changes:
         if change.type.name == "ADDED":

@@ -127,15 +127,12 @@ def process_image(image_url, date, user_id, violation, doc_id):
             image
         )
         if helmet_detected:
-            YOLO.draw_boxes(helmet_results, image, (0, 0, 255), "Helmet")
+            YOLO.draw_boxes(helmet_results, image, (0, 0, 225), "Helmet")
             print("✅ 헬멧 감지")
+            cv2.imwrite(f"output/annotated_{doc_id}.jpg", image)
         else:
             traffic_violation_detection.append("헬멧 미착용")
             print("🚫 헬멧 미착용")
-
-        # 🔽 [추가된 부분] 분석 이미지를 output 폴더에도 저장
-        output_path = f"output/annotated_{doc_id}.jpg"
-        cv2.imwrite(output_path, image)
 
         # 분석 이미지 저장 (Firebase Storage)
         bucket = storage.bucket()
