@@ -129,7 +129,7 @@ def process_image(image_url, date, user_id, violation, doc_id):
         if helmet_detected:
             YOLO.draw_boxes(helmet_results, image, (0, 0, 255), "Helmet")
             print("✅ 헬멧 감지")
-            # cv2.imwrite(f"output/annotated_{doc_id}.jpg", image)
+            traffic_violation_detection.append("위반 사항 없음")
         else:
             traffic_violation_detection.append("헬멧 미착용")
             print("🚫 헬멧 미착용")
@@ -220,7 +220,7 @@ def on_snapshot(col_snapshot, changes, read_time):
             doc_id = change.document.id
             doc_data = change.document.to_dict()
             if "imageUrl" in doc_data:
-                print(f"🔥 새로운 신고 감지  : {doc_id}")
+                print(f"🔥 새로운 신고 감지 : {doc_id}")
                 violation = doc_data.get("violation", "")
                 # 배열이면 문자열로 합침
                 if isinstance(violation, list):
