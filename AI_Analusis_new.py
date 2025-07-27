@@ -81,6 +81,14 @@ def save_conclusion(
     db_fs.collection("Conclusion").document(full_doc_id).set(conclusion_data)
 
 
+# 객체 간의 거리
+def is_near(bbox_k, bbox_p, pad):
+    px, py = (bbox_p[0] + bbox_p[2]) // 2, (bbox_p[1] + bbox_p[3]) // 2
+    return (bbox_k[0] - pad <= px <= bbox_k[2] + pad) and (
+        bbox_k[1] - pad <= py <= bbox_k[3] + pad
+    )
+
+
 def process_image(image_url, date, user_id, violation, doc_id):
     print(f"🔥 이미지 처리 시작: {image_url}")
     image = download_image(image_url)
@@ -91,19 +99,21 @@ def process_image(image_url, date, user_id, violation, doc_id):
     traffic_violation_detection = []
 
     # 1. 킥보드, 사람 감지
-    kickboard = YOLO.kickboard_analysis(image)
-    person = YOLO.person_analysis(image)
+    kickboard_boxes = YOLO.kickboard_boxes(image)
+    person_boxes = YOLO.person_boxes(image)
 
     # 1-2. 킥보드 감지 피드백
-    if kickboard:
+    if len(kickboard_boxes) > 0:
         print("✅ 킥보드 감지")
+        kickboard = True
     else:
         traffic_violation_detection.append("킥보드 감지 실패")
         print("🚫 킥보드 감지 안됨")
 
     # 1-3. 사람 감지 피드백
-    if person:
+    if len(person_boxes) > 0:
         print("✅ 사람 감지")
+        person = True
     else:
         traffic_violation_detection.append("사람 감지 실패")
         print("🚫 사람 감지 안됨")
@@ -167,7 +177,7 @@ def process_image(image_url, date, user_id, violation, doc_id):
 
     elif kickboard and person:
         print("🛑 사진 속 사람은 보행자로 판단됩니다. 자동 반려처리 진행됩니다.\n")
-    
+
         # 신고 정보 중 GPS 가져와 지번주소 추출
         lat, lon, parcel_addr = find_adress(doc_id)
 
