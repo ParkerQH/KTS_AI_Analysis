@@ -81,13 +81,8 @@ def save_conclusion(
     db_fs.collection("Conclusion").document(full_doc_id).set(conclusion_data)
 
 
-# 객체 간의 거리
-def is_near(bbox_k, bbox_p, pad):
-    px, py = (bbox_p[0] + bbox_p[2]) // 2, (bbox_p[1] + bbox_p[3]) // 2
-    return (bbox_k[0] - pad <= px <= bbox_k[2] + pad) and (
-        bbox_k[1] - pad <= py <= bbox_k[3] + pad
-    )
-
+def center(box):
+    return [(box[0] + box[2]) // 2, (box[1] + box[3]) // 2]
 
 def process_image(image_url, date, user_id, violation, doc_id):
     print(f"🔥 이미지 처리 시작: {image_url}")
@@ -98,103 +93,104 @@ def process_image(image_url, date, user_id, violation, doc_id):
 
     traffic_violation_detection = []
 
-    # 1. 킥보드, 사람 감지
+    # 킥보드/사람 bbox 리스트 감지
     kickboard_boxes = YOLO.kickboard_boxes(image)
     person_boxes = YOLO.person_boxes(image)
 
-    # 1-2. 킥보드 감지 피드백
-    if len(kickboard_boxes) > 0:
-        print("✅ 킥보드 감지")
-        kickboard = True
-    else:
+    # 감지 피드백
+    if len(kickboard_boxes) == 0:
         traffic_violation_detection.append("킥보드 감지 실패")
         print("🚫 킥보드 감지 안됨")
-
-    # 1-3. 사람 감지 피드백
-    if len(person_boxes) > 0:
-        print("✅ 사람 감지")
-        person = True
-    else:
+    else :
+        print("✅ 킥보드 감지")
+    
+    if len(person_boxes) == 0:
         traffic_violation_detection.append("사람 감지 실패")
         print("🚫 사람 감지 안됨")
+    else :
+        print("✅ 사람 감지")
 
-    # 1-4. 탑승자와 보행자 구분
-    if kickboard and person:
-        lstm_pose = lstm_p1.lstm_Analysis_per1(image)
-        if lstm_pose:
-            print("✅ 탑승자 감지")
-        else:
-            traffic_violation_detection.append("보행자로 판단됨")
-            print("🚫 보행자로 판단")
+    if len(kickboard_boxes) != 0 and len(person_boxes) != 0:
+        # 사람별로 가장 가까운 킥보드 한 곳에만 배정
+        person_centers = [center(p) for p in person_boxes]
+        kb_centers = [center(kb) for kb in kickboard_boxes]
+        person_assignment = {}
+        for i, p_c in enumerate(person_centers):
+            min_dist = None
+            assigned_kb = None
+            for j, kb_c in enumerate(kb_centers):
+                dist = np.hypot(p_c[0] - kb_c[0], p_c[1] - kb_c[1])
+                if min_dist is None or dist < min_dist:
+                    min_dist = dist
+                    assigned_kb = j
+            person_assignment[i] = (assigned_kb, min_dist)
 
-    # 킥보드 감지, 사람 감지, 탑승자로 판단된 경우
-    if kickboard and person and lstm_pose:
-        # 3-1. 전동킥보드 브랜드 분석
-        top_brand_class = YOLO.brand_analysis(image)
+        # 킥보드별로, 자기로 배정된 사람 중 가까운 2명만 선택
+        kb_persons = {i: [] for i in range(len(kickboard_boxes))}
+        for person_idx, (kb_idx, dist) in person_assignment.items():
+            kb_persons[kb_idx].append((dist, person_boxes[person_idx]))  # 거리와 함께 저장
 
-        # 3-2. 헬멧 착용 여부 분석
-        helmet_detected, helmet_results, top_helmet_confidence = YOLO.helmet_analysis(
-            image
-        )
-        if helmet_detected:
-            YOLO.draw_boxes(helmet_results, image, (0, 0, 255), "Helmet")
-            print("✅ 헬멧 감지")
-            traffic_violation_detection.append("위반 사항 없음")
-        else:
-            traffic_violation_detection.append("헬멧 미착용")
-            print("🚫 헬멧 미착용")
+        pad = 100
+        for k_idx, k_box in enumerate(kickboard_boxes):
+            close_persons = sorted(kb_persons[k_idx], key=lambda x: x[0])[:2]
+            if not close_persons:
+                continue
+            group_boxes = [p_box for (_, p_box) in close_persons]
 
-        # 분석 이미지 저장 (Firebase Storage)
-        bucket = storage.bucket()
-        conclusion_blob = bucket.blob(f"Conclusion/{doc_id}.jpg")
+            # crop 영역 계산 + 패딩 적용
+            xs = [k_box[0], k_box[2]] + [b[0] for b in group_boxes] + [b[2] for b in group_boxes]
+            ys = [k_box[1], k_box[3]] + [b[1] for b in group_boxes] + [b[3] for b in group_boxes]
+            x1 = int(max(min(xs) - pad, 0))
+            x2 = int(min(max(xs) + pad, image.shape[1]))
+            y1 = int(max(min(ys) - pad, 0))
+            y2 = int(min(max(ys) + pad, image.shape[0]))
+            cropped = image[y1:y2, x1:x2].copy()
 
-        # 임시 파일 생성 (분석 이미지)
-        _, temp_annotated = tempfile.mkstemp(suffix=".jpg")
-        cv2.imwrite(temp_annotated, image)
-        conclusion_blob.upload_from_filename(temp_annotated)
-        conclusion_url = conclusion_blob.public_url
+            # ====== crop별 추가 분석 ======
+            # 필드 분석은 cropped 이미지를 인자로 사용
+            brand = YOLO.brand_analysis(cropped)
+            helmet_detected, helmet_results, top_helmet_confidence = YOLO.helmet_analysis(cropped)
+            
+            aiConclusion = []
 
-        # 신고 정보 중 GPS 가져와 지번주소 추출
-        lat, lon, parcel_addr = find_adress(doc_id)
+            if helmet_detected:
+                YOLO.draw_boxes(helmet_results, cropped, (0, 0, 255), "Helmet")
+                print("✅ 헬멧 감지")
+                aiConclusion.append("위반 사항 없음")
+            else:
+                aiConclusion.append("헬멧 미착용")
+                print("🚫 헬멧 미착용")
 
-        # Firestore에 저장될 내용
-        save_conclusion(
-            doc_id=doc_id,
-            date=date,
-            user_id=user_id,
-            violation=violation,
-            result="미확인",
-            aiConclusion=traffic_violation_detection,
-            detectedBrand=top_brand_class,
-            confidence=top_helmet_confidence,
-            gpsInfo=f"{lat} {lon}",
-            region=parcel_addr,
-            imageUrl=conclusion_url,
-            reportImgUrl=image_url,
-        )
+            bucket = storage.bucket()
+            conclusion_blob = bucket.blob(f"Conclusion/{doc_id}_{k_idx}.jpg")
 
-        print(f"✅ 분석된 사진 url : {conclusion_url}\n")
+            _, temp_annotated = tempfile.mkstemp(suffix=".jpg")
+            cv2.imwrite(temp_annotated, cropped)
+            conclusion_blob.upload_from_filename(temp_annotated)
+            conclusion_url = conclusion_blob.public_url
 
-    elif kickboard and person:
-        print("🛑 사진 속 사람은 보행자로 판단됩니다. 자동 반려처리 진행됩니다.\n")
+            # 신고 정보 중 GPS 가져와 지번주소 추출
+            lat, lon, parcel_addr = find_adress(doc_id)
 
-        # 신고 정보 중 GPS 가져와 지번주소 추출
-        lat, lon, parcel_addr = find_adress(doc_id)
+            # Firestore 저장
+            lat, lon, parcel_addr = find_adress(doc_id)
+            save_conclusion(
+                doc_id=f"{doc_id}_{k_idx}",
+                date=date,
+                user_id=user_id,
+                violation=violation,
+                result="미확인",
+                aiConclusion=aiConclusion,
+                detectedBrand=brand,
+                confidence=top_helmet_confidence,
+                gpsInfo=f"{lat} {lon}",
+                region=parcel_addr,
+                imageUrl=conclusion_url,
+                reportImgUrl=image_url,
+            )
 
-        save_conclusion(
-            doc_id=doc_id,
-            date=date,
-            user_id=user_id,
-            violation=violation,
-            result="반려",
-            aiConclusion=traffic_violation_detection,
-            gpsInfo=f"{lat} {lon}",
-            region=parcel_addr,
-            imageUrl=image_url,
-            reportImgUrl=image_url,
-        )
+            print(f"✅ 킥보드 {k_idx} 분석 및 저장 완료: {conclusion_url}")
 
-        print(f"❌ 반려된 사진 url : {image_url}\n")
 
     else:
         print("🛑 킥보드 혹은 사람을 감지하지 못했습니다. 자동 반려처리 진행됩니다.\n")
