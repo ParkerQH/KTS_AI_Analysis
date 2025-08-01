@@ -136,7 +136,7 @@ def process_image(image_url, date, user_id, violation, doc_id):
         for person_idx, (kb_idx, dist) in person_assignment.items():
             kb_persons[kb_idx].append((dist, person_boxes[person_idx]))  # 거리와 함께 저장
 
-        pad = 200   # 객체 스샷 시 패딩값
+        pad = 150   # 객체 스샷 시 패딩값
         idx = 0     # 사진 속 킥보드 별 인덱스 번호
 
         for k_idx, k_box in enumerate(kickboard_boxes):
