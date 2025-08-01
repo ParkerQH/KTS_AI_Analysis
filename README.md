@@ -117,7 +117,7 @@ python AI_Analysis_new.py
 
 | 원본 이미지 | 그룹화된 탑승자 1 | 그룹화된 탑승자 2 |
 |-------------|-------------------|-------------------|
-| <img src="assets/original_grouped.jpg" width="280"/> | <img src="assets/grouped1.jpg" width="220"/> | <img src="assets/grouped2.jpg" width="220"/> |
+| <img src="assets/original_grouped.jpg" width="280"/> | <img src="assets/grouped1.jpg" height="250"/> | <img src="assets/grouped2.jpg" height="250"/> |
 
 - ✅ YOLOv11로 여러 객체(킥보드, 사람 등) 감지
 - ✅ 객체 간 거리 기반으로 킥보드+사람 자동 그룹화
@@ -127,7 +127,7 @@ python AI_Analysis_new.py
 
 | 관절 추출 (MediaPipe) | 행동 분석 결과 (LSTM) |
 |------------------------|------------------------|
-| <img src="assets/pose_landmark.jpg" width="250"/> | <img src="assets/lstm_result.jpg" width="300"/> |
+| <img src="assets/pose_landmark.jpg" height="250"/> | <img src="assets/lstm_result.jpg" width="300"/> |
 
 - 🧩 관절 33개 추출 후 좌표를 시퀀스로 변환
 - 🧠 LSTM 학습 모델을 통해 탑승 / 보행 행동 분류
@@ -135,8 +135,8 @@ python AI_Analysis_new.py
 
 ### 🪖 헬멧 박싱 결과
 
-<p align="center">
-  <img src="assets/helmet_boxed.jpg" width="300"/>
+<p align="left">
+  <img src="assets/helmet_boxed.jpg" height="250"/>
 </p>
 
 - ✅ 헬멧 착용 여부 분석
