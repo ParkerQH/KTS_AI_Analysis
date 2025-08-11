@@ -51,7 +51,6 @@ def save_conclusion(
     idx,
     aiConclusion=None,
     detectedBrand=None,
-    confidence=None,
 ):
 
     db_fs = firestore.client()
@@ -76,9 +75,6 @@ def save_conclusion(
     # 브랜드
     if detectedBrand:
         conclusion_data["detectedBrand"] = detectedBrand
-    # conf
-    if confidence is not None:
-        conclusion_data["confidence"] = confidence
 
     db_fs.collection("Conclusion").document(full_doc_id).set(conclusion_data)
 
@@ -249,7 +245,7 @@ def process_image(image_url, date, user_id, violation, doc_id):
                 continue
 
             # 헬멧 착용 여부 분석
-            helmet_detected, helmet_results, top_helmet_confidence = YOLO.helmet_analysis(cropped)
+            helmet_detected, helmet_results = YOLO.helmet_analysis(cropped)
             if helmet_detected:
                 YOLO.draw_boxes(helmet_results, cropped, (0, 0, 255), "Helmet")
                 print("✅ 헬멧 감지\n")
@@ -274,7 +270,6 @@ def process_image(image_url, date, user_id, violation, doc_id):
                 result="미확인",
                 aiConclusion=aiConclusion,
                 detectedBrand=brand,
-                confidence=top_helmet_confidence,
                 imageUrl=conclusion_url,
                 reportImgUrl=image_url,
                 idx=idx
@@ -305,9 +300,9 @@ def process_image(image_url, date, user_id, violation, doc_id):
 # Firestore 실시간 리스너 설정
 def on_snapshot(col_snapshot, changes, read_time):
     # 초기 스냅샷은 무시 (최초 1회 실행 시 건너뜀)
-    # if not hasattr(on_snapshot, "initialized"):
-    #     on_snapshot.initialized = True
-    #     return
+    if not hasattr(on_snapshot, "initialized"):
+        on_snapshot.initialized = True
+        return
 
     for change in changes:
         if change.type.name == "ADDED":
@@ -337,7 +332,7 @@ if __name__ == "__main__":
     report_col = db_fs.collection("Report")
     listener = report_col.on_snapshot(on_snapshot)
 
-    print("🔥 Firestore 실시간 감지 시작 (종료: Ctrl+C) 🔥")
+    print("🔥 Firestore 실시간 감지 시작 🔥")
 
     try:
         while True:
